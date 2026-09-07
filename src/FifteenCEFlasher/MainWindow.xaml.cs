@@ -40,7 +40,7 @@ public partial class MainWindow : Window
         panel.Children.Add(new TextBlock
         {
             Text = "Flash HP 15c CE firmware on Windows.",
-            FontSize="18",
+            FontSize = 18,
             FontWeight = FontWeights.SemiBold,
             Foreground = (Brush)FindResource("InkBrush"),
             TextWrapping = TextWrapping.Wrap,
@@ -236,8 +236,6 @@ public partial class MainWindow : Window
             case WizardStep.ProgrammingMode:
                 if (_store.Wizard.IdentitySupported)
                     panel.Children.Add(new TextBlock { Text = "Calculator detected in programming mode.", Foreground = Brushes.DarkGreen });
-                break;
-            case WizardStep.Backup when step == WizardStep.Backup:
                 break;
         }
 

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Threading;
@@ -67,14 +68,21 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
     public bool CanStartBatch =>
         Wizard.FirmwareOk && (BatchBackupChoice == BatchBackupChoice.Skip || BatchBackupFolder is not null);
 
-    public Flasher Flasher { get; }
+    public Flasher Flasher { get; private set; }
 
     public FlasherStore()
     {
-        Flasher = new Flasher { FlashCommandSettleSeconds = TimeSpan.FromMilliseconds(10) };
+        Flasher = HardwareFlasher();
         _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _pollTimer.Tick += (_, _) => RefreshConnection();
     }
+
+    private static Flasher HardwareFlasher() => new()
+    {
+        FlashCommandSettleSeconds = TimeSpan.FromMilliseconds(10),
+        Ports = new WindowsComPortListing(),
+        OpenTransport = port => new WindowsSerialLink(port.PortName),
+    };
 
     public void Start()
     {
@@ -98,24 +106,24 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
 
         if (mode == AppMode.Demo)
         {
-            _demoTransport = new SimulatedCalculatorTransport(
+            var transport = new SimulatedCalculatorTransport(
                 operationDelay: TimeSpan.FromMilliseconds(80),
                 preloadApplication: true);
-            Flasher.Ports = new SimulatedPortListing();
-            Flasher.OpenTransport = _ => _demoTransport;
+            _demoTransport = transport;
+            Flasher = new Flasher
+            {
+                FlashCommandSettleSeconds = TimeSpan.FromMilliseconds(10),
+                Ports = new SimulatedPortListing(),
+                OpenTransport = _ => transport,
+            };
             Wizard.IdentitySupported = true;
             StatusMessage = "DEMO mode — simulated calculator";
             DetailMessage = "No hardware required.";
         }
-        else if (mode == AppMode.Probe)
-        {
-            Flasher.Ports = new WindowsComPortListing();
-            Flasher.OpenTransport = port => new WindowsSerialLink(port.PortName);
-        }
         else
         {
-            Flasher.Ports = new WindowsComPortListing();
-            Flasher.OpenTransport = port => new WindowsSerialLink(port.PortName);
+            _demoTransport = null;
+            Flasher = HardwareFlasher();
             if (mode == AppMode.Batch)
                 BeginBatchSession();
         }
