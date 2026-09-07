@@ -8,6 +8,9 @@
     <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="FifteenCEFlasherCore.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="System.IO.Ports" Version="8.0.0" />
     <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>

@@ -53,19 +53,28 @@ public sealed class WindowsComPortListing : ISerialPortListing
         return byPort.Values.OrderBy(p => p.PortName, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
+    /// <summary>
+    /// Windows PnP IDs put VID and PID in one segment: USB\VID_03EB&amp;PID_6124\...
+    /// FTDI often uses plus: FTDIBUS\VID_0403+PID_6015+...
+    /// </summary>
     internal static (ushort? Vid, ushort? Pid) ParseVidPid(string pnpDeviceId)
     {
-        ushort? vid = null;
-        ushort? pid = null;
-        foreach (var part in pnpDeviceId.Split('\\'))
-        {
-            var upper = part.ToUpperInvariant();
-            if (upper.StartsWith("VID_", StringComparison.Ordinal))
-                vid = Convert.ToUInt16(upper.Substring(4, 4), 16);
-            if (upper.StartsWith("PID_", StringComparison.Ordinal))
-                pid = Convert.ToUInt16(upper.Substring(4, 4), 16);
-        }
-        return (vid, pid);
+        var upper = pnpDeviceId.ToUpperInvariant();
+        return (ParseHexToken(upper, "VID_"), ParseHexToken(upper, "PID_"));
+    }
+
+    private static ushort? ParseHexToken(string upper, string token)
+    {
+        var index = upper.IndexOf(token, StringComparison.Ordinal);
+        if (index < 0)
+            return null;
+        var hexStart = index + token.Length;
+        if (hexStart + 4 > upper.Length)
+            return null;
+        var hex = upper.Substring(hexStart, 4);
+        return ushort.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out var value)
+            ? value
+            : null;
     }
 
     internal static UsbPortKind Classify(ushort? vid, ushort? pid)

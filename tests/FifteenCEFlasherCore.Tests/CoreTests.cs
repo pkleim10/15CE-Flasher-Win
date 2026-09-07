@@ -150,6 +150,32 @@ public class FlasherTests
     }
 }
 
+public class WindowsComPortListingTests
+{
+    [Theory]
+    [InlineData(@"USB\VID_03EB&PID_6124\5&ABC&0&1", 0x03EB, 0x6124, UsbPortKind.AtmelSamBa)]
+    [InlineData(@"USB\VID_03EB&PID_6124&MI_00\6&DEF&0&0000", 0x03EB, 0x6124, UsbPortKind.AtmelSamBa)]
+    [InlineData(@"USB\VID_0403&PID_6015\A1B2C3D4", 0x0403, 0x6015, UsbPortKind.Ftdi)]
+    [InlineData(@"FTDIBUS\VID_0403+PID_6015+A1B2C3D4A\0000", 0x0403, 0x6015, UsbPortKind.Ftdi)]
+    [InlineData(@"USB\VID_046D&PID_C077\6&1234", 0x046D, 0xC077, UsbPortKind.Unknown)]
+    public void ParseVidPidFromWindowsPnpId(string pnp, int vid, int pid, UsbPortKind kind)
+    {
+        var (parsedVid, parsedPid) = WindowsComPortListing.ParseVidPid(pnp);
+        Assert.Equal((ushort)vid, parsedVid);
+        Assert.Equal((ushort)pid, parsedPid);
+        Assert.Equal(kind, WindowsComPortListing.Classify(parsedVid, parsedPid));
+    }
+
+    [Fact]
+    public void ParseVidPidIgnoresBareComName()
+    {
+        var (vid, pid) = WindowsComPortListing.ParseVidPid("COM3");
+        Assert.Null(vid);
+        Assert.Null(pid);
+        Assert.Equal(UsbPortKind.Unknown, WindowsComPortListing.Classify(vid, pid));
+    }
+}
+
 internal sealed class FixedPortListing(IReadOnlyList<SerialPortInfo> ports) : ISerialPortListing
 {
     public IReadOnlyList<SerialPortInfo> ListPorts() => ports;
