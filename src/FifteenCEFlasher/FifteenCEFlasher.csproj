@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>15CEFlasher</AssemblyName>
+    <RootNamespace>FifteenCEFlasher</RootNamespace>
+    <Version>0.1.0</Version>
+    <FileVersion>0.1.0.100</FileVersion>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <Product>15CE Flasher</Product>
+    <Company>Mach II Labs</Company>
+    <Description>Flash HP 15c CE firmware on Windows</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FifteenCEFlasherCore\FifteenCEFlasherCore.csproj" />
+  </ItemGroup>
+</Project>

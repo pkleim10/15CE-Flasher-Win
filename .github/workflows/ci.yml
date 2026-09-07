@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  APP_VERSION: "0.1.0"
+  APP_BUILD: "100"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore 15CEFlasherWin.sln
+
+      - name: Build
+        run: dotnet build 15CEFlasherWin.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test 15CEFlasherWin.sln -c Release --no-build --verbosity normal
+
+      - name: Publish self-contained single-file exe
+        run: >
+          dotnet publish src/FifteenCEFlasher/FifteenCEFlasher.csproj
+          -c Release -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -o publish
+
+      - name: Rename for CDN
+        shell: pwsh
+        run: |
+          $name = "15CEFlasher-Win-${{ env.APP_VERSION }}-${{ env.APP_BUILD }}.exe"
+          Move-Item -Force publish/15CEFlasher.exe "publish/$name"
+          echo "EXE_NAME=$name" >> $env:GITHUB_ENV
+          $hash = Get-FileHash "publish/$name" -Algorithm SHA256
+          echo "EXE_SHA256=$($hash.Hash.ToLower())" >> $env:GITHUB_ENV
+          echo "### Build output" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **File:** \`$name\`" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **SHA-256:** \`$($hash.Hash.ToLower())\`" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "Upload \`publish/$name\` to \`downloads.machiilabs.com/$name\` and update \`/winflasher\` + \`PRODUCT_DOWNLOADS.winflasher\`." >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.EXE_NAME }}
+          path: publish/${{ env.EXE_NAME }}
+          retention-days: 90
