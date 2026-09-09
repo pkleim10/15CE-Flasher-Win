@@ -4,6 +4,8 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using FifteenCEFlasherCore;
+using SharpVectors.Converters;
+using SharpVectors.Renderers.Wpf;
 
 namespace FifteenCEFlasher;
 
@@ -241,7 +243,7 @@ public partial class MainWindow : Window
         switch (step)
         {
             case WizardStep.Cable:
-                panel.Children.Add(WizardDiagram("wizard-cable.png", maxHeight: 200));
+                panel.Children.Add(WizardSvgDiagram("step1-cable-diagram-pc.svg", maxHeight: 220));
                 break;
             case WizardStep.ProgrammingMode:
                 panel.Children.Add(WizardDiagram("wizard-programming-mode.png"));
@@ -353,18 +355,11 @@ public partial class MainWindow : Window
     private UIElement BuildWizardButtons(WizardStep step)
     {
         var nav = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
+        nav.Children.Add(MakeActionButton("← Welcome", _store.ReturnToWelcome));
 
         if (step == WizardStep.Checksum)
         {
-            nav.Children.Add(MakeActionButton("← Welcome", _store.ReturnToWelcome));
             nav.Children.Add(MakeActionButton("Done", () => Application.Current.Shutdown(), primary: true));
-            return nav;
-        }
-
-        if (step == WizardStep.Cable)
-        {
-            nav.Children.Add(MakeActionButton("← Welcome", _store.ReturnToWelcome));
-            nav.Children.Add(MakeActionButton("Next", _store.WizardAdvance, primary: true));
             return nav;
         }
 
@@ -372,7 +367,6 @@ public partial class MainWindow : Window
             nav.Children.Add(MakeActionButton("Back", _store.WizardBack));
         if (_store.Wizard.CanAdvance)
             nav.Children.Add(MakeActionButton("Next", _store.WizardAdvance, primary: true));
-        nav.Children.Add(MakeActionButton("← Welcome", _store.ReturnToWelcome));
         return nav;
     }
 
@@ -458,6 +452,29 @@ public partial class MainWindow : Window
         };
     }
 
+    private static Image WizardSvgDiagram(string fileName, double maxHeight)
+    {
+        var uri = new Uri($"pack://application:,,,/Assets/{fileName}");
+        using var stream = Application.GetResourceStream(uri)?.Stream
+            ?? throw new InvalidOperationException($"Missing diagram {fileName}");
+        using var reader = new FileSvgReader(new WpfDrawingSettings
+        {
+            IncludeRuntime = false,
+            TextAsGeometry = true,
+        }, isEmbedded: true);
+        var drawing = reader.Read(stream)
+            ?? throw new InvalidOperationException($"Could not render {fileName}");
+        return new Image
+        {
+            Source = new DrawingImage(drawing),
+            Stretch = Stretch.Uniform,
+            MaxHeight = maxHeight,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 0, 12),
+            SnapsToDevicePixels = true,
+        };
+    }
+
     private TextBlock BodyText(string text) =>
         new()
         {
@@ -510,10 +527,14 @@ public partial class MainWindow : Window
             Content = label,
             Padding = new Thickness(16, 8, 16, 8),
             Margin = new Thickness(0, 0, 8, 8),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
             IsEnabled = enabled,
             Background = primary ? (Brush)FindResource("AccentBrush") : Brushes.White,
             Foreground = primary ? Brushes.White : (Brush)FindResource("InkBrush"),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(229, 231, 235)),
+            BorderBrush = primary
+                ? (Brush)FindResource("AccentBrush")
+                : new SolidColorBrush(Color.FromRgb(229, 231, 235)),
             BorderThickness = new Thickness(1),
         };
         btn.Click += (_, _) => onClick();

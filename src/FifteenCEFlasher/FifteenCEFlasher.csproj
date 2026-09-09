@@ -8,8 +8,8 @@
     <AssemblyName>15CEFlasher</AssemblyName>
     <RootNamespace>FifteenCEFlasher</RootNamespace>
     <Version>0.1.0</Version>
-    <FileVersion>0.1.0.103</FileVersion>
-    <InformationalVersion>0.1.0+103</InformationalVersion>
+    <FileVersion>0.1.0.104</FileVersion>
+    <InformationalVersion>0.1.0+104</InformationalVersion>
     <AssemblyVersion>0.1.0.0</AssemblyVersion>
     <Product>15CE Flasher</Product>
     <Company>Mach II Labs</Company>
@@ -17,6 +17,8 @@
   </PropertyGroup>
     <ItemGroup>
     <ProjectReference Include="..\FifteenCEFlasherCore\FifteenCEFlasherCore.csproj" />
+    <PackageReference Include="SharpVectors.Wpf" Version="1.8.5" />
     <Resource Include="Assets\*.png" />
+    <Resource Include="Assets\*.svg" />
   </ItemGroup>
 </Project>

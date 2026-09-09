@@ -6,7 +6,7 @@
         <SolidColorBrush x:Key="InkBrush" Color="#1A1A1A"/>
         <SolidColorBrush x:Key="PaperBrush" Color="#F7F6F3"/>
         <SolidColorBrush x:Key="PanelBrush" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="AccentBrush" Color="#1A1A1A"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#2563EB"/>
         <SolidColorBrush x:Key="MutedBrush" Color="#6B7280"/>
     </Application.Resources>
 </Application>
