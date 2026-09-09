@@ -250,10 +250,38 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
         BatchSessionStamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
         BatchUnitNumber = 1;
         BatchPhase = BatchPhase.Waiting;
+        StatusMessage = "Waiting…";
+        DetailMessage = "Hold ERASE, press RESET, then release ERASE.";
+        Disconnect();
         NotifyAll();
     }
 
-    public void StopBatch() => Application.Current.Shutdown();
+    public void PrepareNextBatchUnit()
+    {
+        BatchUnitNumber++;
+        BatchPhase = BatchPhase.Waiting;
+        StatusMessage = "Waiting…";
+        DetailMessage = "Hold ERASE, press RESET, then release ERASE.";
+        PagePreviewHeader = null;
+        PagePreviewLines = [];
+        Disconnect();
+        NotifyAll();
+    }
+
+    public void RetryBatchUnit()
+    {
+        BatchPhase = BatchPhase.Waiting;
+        StatusMessage = "Waiting…";
+        DetailMessage = "Hold ERASE, press RESET, then release ERASE.";
+        Disconnect();
+        NotifyAll();
+    }
+
+    public void StopBatch()
+    {
+        _workCts?.Cancel();
+        Application.Current.Shutdown();
+    }
 
     public async Task RunBackupAsync()
     {
@@ -376,7 +404,7 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        if (Wizard.IsBusy || BatchPhase is BatchPhase.BackingUp or BatchPhase.Flashing)
+        if (Wizard.IsBusy || BatchPhase is BatchPhase.BackingUp or BatchPhase.Flashing or BatchPhase.Done)
             return;
 
         if (Wizard.FlashSucceeded && Wizard.Step == WizardStep.Flash)
@@ -409,42 +437,67 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
 
     private async Task RunBatchUnitAsync()
     {
-        if (BatchPhase != BatchPhase.Waiting || FirmwarePath is null)
+        if (Wizard.IsBusy || BatchPhase != BatchPhase.Waiting || FirmwarePath is null)
             return;
 
         _workCts?.Cancel();
         _workCts = new CancellationTokenSource();
         var token = _workCts.Token;
+        Wizard.IsBusy = true;
+        Progress = 0;
+        PagePreviewHeader = null;
+        PagePreviewLines = [];
+        NotifyAll();
 
         try
         {
             if (BatchBackupChoice == BatchBackupChoice.AutoSave && BatchBackupFolder is not null && BatchSessionStamp is not null)
             {
                 BatchPhase = BatchPhase.BackingUp;
-                Notify(nameof(BatchPhase));
+                StatusMessage = "Saving backup…";
+                NotifyAll();
                 var backupPath = BatchBackupNaming.FilePath(BatchBackupFolder, BatchSessionStamp, BatchUnitNumber);
                 await Task.Run(() =>
                 {
                     token.ThrowIfCancellationRequested();
                     var client = EnsureConnected();
-                    Flasher.Read(backupPath, client);
+                    Flasher.Read(backupPath, client, (f, _) => ReportProgress(f, "Saving backup…"));
                 }, token);
             }
 
             BatchPhase = BatchPhase.Flashing;
-            Notify(nameof(BatchPhase));
+            StatusMessage = "Writing firmware…";
+            NotifyAll();
+            FlashPageWrite? latestPage = null;
             await Task.Run(() =>
             {
                 token.ThrowIfCancellationRequested();
                 var client = EnsureConnected();
-                Flasher.Write(FirmwarePath, client: client);
+                Flasher.Write(
+                    FirmwarePath,
+                    client: client,
+                    progress: (f, phase) =>
+                    {
+                        var status = phase switch
+                        {
+                            FlashProgressPhase.Writing => "Writing firmware…",
+                            FlashProgressPhase.Verifying => "Verifying…",
+                            _ => StatusMessage,
+                        };
+                        if (phase == FlashProgressPhase.Verifying)
+                            ReportProgress(f, status, clearPagePreview: true);
+                        else
+                            ReportProgress(f, status, latestPage);
+                    },
+                    pageProgress: page => latestPage = page);
             }, token);
 
             BatchPhase = BatchPhase.Done;
+            PagePreviewHeader = null;
+            PagePreviewLines = [];
             StatusMessage = $"Unit {BatchUnitNumber} complete";
-            DetailMessage = "Press RESET, then connect the next calculator.";
-            BatchUnitNumber++;
-            BatchPhase = BatchPhase.Waiting;
+            DetailMessage = "Press RESET, then turn the calculator ON.";
+            Disconnect();
         }
         catch (OperationCanceledException)
         {
@@ -455,9 +508,14 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
             BatchPhase = BatchPhase.Error;
             StatusMessage = "Batch error";
             DetailMessage = ex.Message;
+            Disconnect();
         }
-
-        NotifyAll();
+        finally
+        {
+            Wizard.IsBusy = false;
+            Progress = 0;
+            NotifyAll();
+        }
     }
 
     private SambaClient EnsureConnected()
@@ -511,6 +569,10 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
             FirmwareImage.Validate(File.ReadAllBytes(path));
             FirmwarePath = path;
             Wizard.FirmwareOk = true;
+            FirmwareAssessment = VoyagerFirmwareChecksum.FirmwareFileAssessment(
+                File.ReadAllBytes(path),
+                BackupAssessment,
+                backupSkipped: true);
         }
         catch
         {

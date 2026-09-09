@@ -180,7 +180,22 @@ public partial class MainWindow : Window
 
             panel.Children.Add(MakeActionButton("Choose firmware…", _store.PickFirmware));
             if (_store.FirmwarePath is not null)
-                panel.Children.Add(new TextBlock { Text = _store.FirmwarePath, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 8), Foreground = (Brush)FindResource("MutedBrush") });
+            {
+                panel.Children.Add(new TextBlock
+                {
+                    Text = _store.FirmwarePath,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 8, 0, 4),
+                    Foreground = (Brush)FindResource("MutedBrush"),
+                });
+                if (_store.FirmwareAssessment is not null)
+                    panel.Children.Add(new TextBlock
+                    {
+                        Text = $"Expected checksum:  {VoyagerFirmwareChecksum.Formatted(_store.FirmwareAssessment.Displayed)}",
+                        Margin = new Thickness(0, 0, 0, 8),
+                        Foreground = (Brush)FindResource("MutedBrush"),
+                    });
+            }
 
             var backupPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
             var skip = new RadioButton { Content = "Skip backups", IsChecked = _store.BatchBackupChoice == BatchBackupChoice.Skip, Margin = new Thickness(0, 0, 16, 0) };
@@ -194,7 +209,7 @@ public partial class MainWindow : Window
             if (_store.BatchBackupChoice == BatchBackupChoice.AutoSave)
                 panel.Children.Add(MakeActionButton("Choose backup folder…", _store.PickBatchBackupFolder));
 
-            panel.Children.Add(MakeActionButton("Start batch", () =>
+            var start = MakeActionButton("Start batch", () =>
             {
                 if (!_store.CanStartBatch)
                 {
@@ -202,25 +217,100 @@ public partial class MainWindow : Window
                     return;
                 }
                 _store.StartBatchRun();
-            }, primary: true));
+            }, primary: true);
+            start.Margin = new Thickness(0, 16, 8, 8);
+            panel.Children.Add(start);
         }
         else
         {
             panel.Children.Add(new TextBlock
             {
-                Text = $"Unit {_store.BatchUnitNumber} · {_store.BatchPhase}",
+                Text = BatchRunTitle(),
                 FontSize = 16,
                 Margin = new Thickness(0, 0, 0, 8),
             });
-            panel.Children.Add(new TextBlock
+
+            switch (_store.BatchPhase)
             {
-                Text = "Connect a calculator in programming mode. The app flashes automatically when connected.",
-                TextWrapping = TextWrapping.Wrap,
-            });
+                case BatchPhase.Waiting:
+                    panel.Children.Add(BodyText("Hold ERASE, press RESET, then release ERASE. The app connects and flashes automatically."));
+                    AddBatchExpectedChecksum(panel);
+                    break;
+                case BatchPhase.BackingUp:
+                    panel.Children.Add(BodyText("Saving backup…"));
+                    break;
+                case BatchPhase.Flashing:
+                    panel.Children.Add(BodyText("Writing firmware…"));
+                    if (_store.PagePreviewHeader is not null)
+                    {
+                        panel.Children.Add(new TextBlock
+                        {
+                            Text = _store.PagePreviewHeader,
+                            FontWeight = FontWeights.SemiBold,
+                            Foreground = (Brush)FindResource("InkBrush"),
+                            Margin = new Thickness(0, 12, 0, 4),
+                        });
+                        foreach (var line in _store.PagePreviewLines.Take(8))
+                            panel.Children.Add(new TextBlock
+                            {
+                                Text = line,
+                                FontFamily = new FontFamily("Consolas"),
+                                FontSize = 11,
+                                Foreground = (Brush)FindResource("InkBrush"),
+                            });
+                    }
+                    break;
+                case BatchPhase.Done:
+                    panel.Children.Add(new TextBlock
+                    {
+                        Text = "Flashed and verified.",
+                        FontWeight = FontWeights.SemiBold,
+                        Foreground = Brushes.DarkGreen,
+                        Margin = new Thickness(0, 0, 0, 8),
+                    });
+                    AddBatchExpectedChecksum(panel);
+                    panel.Children.Add(BodyText("Press RESET on the cable, then turn the calculator ON. “Pr Error” is expected."));
+                    panel.Children.Add(MakeActionButton("Next unit", _store.PrepareNextBatchUnit, primary: true));
+                    break;
+                case BatchPhase.Error:
+                    panel.Children.Add(new TextBlock
+                    {
+                        Text = _store.DetailMessage,
+                        TextWrapping = TextWrapping.Wrap,
+                        Foreground = Brushes.DarkRed,
+                        Margin = new Thickness(0, 0, 0, 8),
+                    });
+                    panel.Children.Add(MakeActionButton("Retry", _store.RetryBatchUnit, primary: true));
+                    break;
+            }
         }
 
         panel.Children.Add(MakeFooterButtons(showBack: true, doneLabel: "Stop batch", onDone: _store.StopBatch));
         return panel;
+    }
+
+    private string BatchRunTitle() => _store.BatchPhase switch
+    {
+        BatchPhase.Waiting => $"Unit {_store.BatchUnitNumber}",
+        BatchPhase.BackingUp => $"Unit {_store.BatchUnitNumber} · Saving backup",
+        BatchPhase.Flashing => $"Unit {_store.BatchUnitNumber} · Writing firmware",
+        BatchPhase.Done => $"Unit {_store.BatchUnitNumber} complete",
+        BatchPhase.Error => $"Unit {_store.BatchUnitNumber} · Error",
+        _ => "BATCH mode",
+    };
+
+    private void AddBatchExpectedChecksum(StackPanel panel)
+    {
+        if (_store.FirmwareAssessment is null)
+            return;
+        var checksum = VoyagerFirmwareChecksum.Formatted(_store.FirmwareAssessment.Displayed);
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"Expected checksum on calculator: {checksum} (test menu 2.C).",
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = (Brush)FindResource("MutedBrush"),
+            Margin = new Thickness(0, 0, 0, 8),
+        });
     }
 
     private UIElement BuildWizardView()
