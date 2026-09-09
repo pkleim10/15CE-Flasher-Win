@@ -350,6 +350,9 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
         if (ShowWelcome)
             return;
 
+        if ((SelectedMode is AppMode.Flash or AppMode.Demo) && Wizard.Step == WizardStep.Cable)
+            return;
+
         if (SelectedMode == AppMode.Probe)
         {
             var probe = new ConnectionProbeService

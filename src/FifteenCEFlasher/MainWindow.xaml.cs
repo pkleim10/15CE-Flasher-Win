@@ -51,8 +51,14 @@ public partial class MainWindow : Window
         ProgressBar.Visibility = _store.Wizard.IsBusy || _store.Progress > 0
             ? Visibility.Visible
             : Visibility.Collapsed;
+        StatusBar.Visibility = ShowStatusBar() ? Visibility.Visible : Visibility.Collapsed;
 
-        MainContent.Content = _store.ShowWelcome ? BuildWelcome() : Scroll(BuildActiveView());
+        if (_store.ShowWelcome)
+            MainContent.Content = Scroll(BuildWelcome());
+        else if (_store.SelectedMode is AppMode.Probe || _store.IsBatchActive)
+            MainContent.Content = Scroll(BuildActiveView());
+        else
+            MainContent.Content = BuildWizardView();
     }
 
     private UIElement BuildWelcome()
@@ -217,6 +223,10 @@ public partial class MainWindow : Window
 
     private UIElement BuildWizardView()
     {
+        var grid = new Grid();
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
         var panel = new StackPanel();
         var step = _store.Wizard.Step;
 
@@ -231,7 +241,7 @@ public partial class MainWindow : Window
         switch (step)
         {
             case WizardStep.Cable:
-                panel.Children.Add(WizardDiagram("wizard-cable.png", maxHeight: 280));
+                panel.Children.Add(WizardDiagram("wizard-cable.png", maxHeight: 200));
                 break;
             case WizardStep.ProgrammingMode:
                 panel.Children.Add(WizardDiagram("wizard-programming-mode.png"));
@@ -301,16 +311,17 @@ public partial class MainWindow : Window
                         Foreground = Brushes.DarkGreen,
                         Margin = new Thickness(0, 0, 0, 8),
                     });
-                panel.Children.Add(MakeActionButton(
-                    flashLabel,
-                    async () =>
-                    {
-                        if (!ConfirmFlash())
-                            return;
-                        await _store.RunFlashAsync();
-                    },
-                    primary: !_store.Wizard.FlashSucceeded,
-                    enabled: !_store.Wizard.IsBusy && _store.FirmwarePath is not null));
+                if (!_store.Wizard.IsBusy)
+                    panel.Children.Add(MakeActionButton(
+                        flashLabel,
+                        async () =>
+                        {
+                            if (!ConfirmFlash())
+                                return;
+                            await _store.RunFlashAsync();
+                        },
+                        primary: !_store.Wizard.FlashSucceeded,
+                        enabled: _store.FirmwarePath is not null));
                 if (_store.PagePreviewHeader is not null)
                 {
                     panel.Children.Add(new TextBlock { Text = _store.PagePreviewHeader, FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("InkBrush"), Margin = new Thickness(0, 12, 0, 4) });
@@ -324,17 +335,54 @@ public partial class MainWindow : Window
                 break;
         }
 
-        var nav = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 16, 0, 0) };
+        var scroll = new ScrollViewer
+        {
+            Content = panel,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        };
+        Grid.SetRow(scroll, 0);
+        grid.Children.Add(scroll);
+
+        var buttons = BuildWizardButtons(step);
+        Grid.SetRow(buttons, 1);
+        grid.Children.Add(buttons);
+        return grid;
+    }
+
+    private UIElement BuildWizardButtons(WizardStep step)
+    {
+        var nav = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
+
+        if (step == WizardStep.Checksum)
+        {
+            nav.Children.Add(MakeActionButton("← Welcome", _store.ReturnToWelcome));
+            nav.Children.Add(MakeActionButton("Done", () => Application.Current.Shutdown(), primary: true));
+            return nav;
+        }
+
+        if (step == WizardStep.Cable)
+        {
+            nav.Children.Add(MakeActionButton("← Welcome", _store.ReturnToWelcome));
+            nav.Children.Add(MakeActionButton("Next", _store.WizardAdvance, primary: true));
+            return nav;
+        }
+
         if (_store.Wizard.CanGoBack)
             nav.Children.Add(MakeActionButton("Back", _store.WizardBack));
         if (_store.Wizard.CanAdvance)
             nav.Children.Add(MakeActionButton("Next", _store.WizardAdvance, primary: true));
-        if (step == WizardStep.Finish)
-            nav.Children.Add(MakeActionButton("Done", () => Application.Current.Shutdown(), primary: true));
-        panel.Children.Add(nav);
+        nav.Children.Add(MakeActionButton("← Welcome", _store.ReturnToWelcome));
+        return nav;
+    }
 
-        panel.Children.Add(MakeFooterButtons(showBack: true, doneLabel: null));
-        return panel;
+    private bool ShowStatusBar()
+    {
+        if (_store.ShowWelcome)
+            return false;
+        if (_store.SelectedMode is AppMode.Probe or AppMode.Batch)
+            return true;
+        return _store.Wizard.Step != WizardStep.Cable;
     }
 
     private bool ConfirmFlash()
