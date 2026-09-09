@@ -8,8 +8,8 @@
     <AssemblyName>15CEFlasher</AssemblyName>
     <RootNamespace>FifteenCEFlasher</RootNamespace>
     <Version>0.1.0</Version>
-    <FileVersion>0.1.0.101</FileVersion>
-    <InformationalVersion>0.1.0+101</InformationalVersion>
+    <FileVersion>0.1.0.102</FileVersion>
+    <InformationalVersion>0.1.0+102</InformationalVersion>
     <AssemblyVersion>0.1.0.0</AssemblyVersion>
     <Product>15CE Flasher</Product>
     <Company>Mach II Labs</Company>

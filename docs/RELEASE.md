@@ -6,7 +6,7 @@ You never need a local Windows PC to **build**. You only need Windows hardware t
 
 1. Push to GitHub, **or** open **Actions → CI → Run workflow** (manual trigger).
 2. Wait for the green **windows-latest** job (~3–5 min).
-3. Open the job → **Artifacts** → download `15CEFlasher-Win-0.1.0-100.exe` (CDN filename is stable; bump `APP_BUILD` / `FileVersion` for testers).
+3. Open the job → **Artifacts** → download `15CEFlasher-Win-0.1.0-<build>.exe` (same name as `CDN_FILENAME`).
 
 The job summary lists **SHA-256** for the machii-labs page.
 
@@ -21,7 +21,7 @@ The job summary lists **SHA-256** for the machii-labs page.
 
 ## Bump version
 
-Edit `.github/workflows/ci.yml` `APP_VERSION` / `APP_BUILD` and `src/FifteenCEFlasher/FifteenCEFlasher.csproj` `Version` / `FileVersion` together. Leave `CDN_FILENAME` as `15CEFlasher-Win-0.1.0-100.exe` during beta so R2 overwrites the same object.
+Edit `.github/workflows/ci.yml` `APP_VERSION` / `APP_BUILD` / `CDN_FILENAME` and `src/FifteenCEFlasher/FifteenCEFlasher.csproj` `Version` / `FileVersion` together. Put the build number in `CDN_FILENAME` (for example `15CEFlasher-Win-0.1.0-102.exe`) so testers do not keep a cached older exe.
 
 ## Local dev on Mac
 

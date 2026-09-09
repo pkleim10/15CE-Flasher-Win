@@ -15,7 +15,13 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         SubtitleText.Text = AppVersionLabel();
-        _store.PropertyChanged += (_, _) => Dispatcher.Invoke(UpdateUi);
+        _store.PropertyChanged += (_, _) =>
+        {
+            if (Dispatcher.CheckAccess())
+                UpdateUi();
+            else
+                Dispatcher.Invoke(UpdateUi);
+        };
         _store.Start();
         UpdateUi();
     }
@@ -41,7 +47,10 @@ public partial class MainWindow : Window
         StatusText.Text = _store.StatusMessage;
         DetailText.Text = _store.DetailMessage;
         ProgressBar.Value = _store.Progress;
-        ProgressBar.Visibility = _store.Progress > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ProgressBar.IsIndeterminate = _store.Wizard.IsBusy && _store.Progress <= 0;
+        ProgressBar.Visibility = _store.Wizard.IsBusy || _store.Progress > 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
         MainContent.Content = _store.ShowWelcome ? BuildWelcome() : Scroll(BuildActiveView());
     }
@@ -284,6 +293,14 @@ public partial class MainWindow : Window
                 var flashLabel = _store.SelectedMode == AppMode.Demo
                     ? "Flash simulated calculator"
                     : "Flash calculator";
+                if (_store.Wizard.FlashSucceeded)
+                    panel.Children.Add(new TextBlock
+                    {
+                        Text = "Flashed and verified.",
+                        FontWeight = FontWeights.SemiBold,
+                        Foreground = Brushes.DarkGreen,
+                        Margin = new Thickness(0, 0, 0, 8),
+                    });
                 panel.Children.Add(MakeActionButton(
                     flashLabel,
                     async () =>
@@ -292,7 +309,7 @@ public partial class MainWindow : Window
                             return;
                         await _store.RunFlashAsync();
                     },
-                    primary: true,
+                    primary: !_store.Wizard.FlashSucceeded,
                     enabled: !_store.Wizard.IsBusy && _store.FirmwarePath is not null));
                 if (_store.PagePreviewHeader is not null)
                 {
@@ -310,7 +327,7 @@ public partial class MainWindow : Window
         var nav = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 16, 0, 0) };
         if (_store.Wizard.CanGoBack)
             nav.Children.Add(MakeActionButton("Back", _store.WizardBack));
-        if (_store.Wizard.CanAdvance && step != WizardStep.Flash)
+        if (_store.Wizard.CanAdvance)
             nav.Children.Add(MakeActionButton("Next", _store.WizardAdvance, primary: true));
         if (step == WizardStep.Finish)
             nav.Children.Add(MakeActionButton("Done", () => Application.Current.Shutdown(), primary: true));

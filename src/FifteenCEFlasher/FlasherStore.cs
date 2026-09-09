@@ -261,14 +261,16 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
             return;
 
         Wizard.IsBusy = true;
-        Notify(nameof(Wizard));
+        StatusMessage = "Reading firmware…";
+        Progress = 0;
+        NotifyAll();
         try
         {
             await Task.Run(() =>
             {
                 var path = BackupPath ?? throw new InvalidOperationException("No backup path");
                 var client = EnsureConnected();
-                Flasher.Read(path, client, (f, _) => Progress = f);
+                Flasher.Read(path, client, (f, _) => ReportProgress(f, "Reading firmware…"));
             });
 
             var data = File.ReadAllBytes(BackupPath!);
@@ -295,9 +297,14 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
             return;
 
         Wizard.IsBusy = true;
-        Notify(nameof(Wizard));
+        StatusMessage = "Writing firmware…";
+        Progress = 0;
+        PagePreviewHeader = null;
+        PagePreviewLines = [];
+        NotifyAll();
         try
         {
+            FlashPageWrite? latestPage = null;
             await Task.Run(() =>
             {
                 var client = EnsureConnected();
@@ -306,23 +313,24 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
                     client: client,
                     progress: (f, phase) =>
                     {
-                        Progress = f;
-                        StatusMessage = phase switch
+                        var status = phase switch
                         {
                             FlashProgressPhase.Writing => "Writing firmware…",
                             FlashProgressPhase.Verifying => "Verifying…",
                             _ => StatusMessage,
                         };
+                        if (phase == FlashProgressPhase.Verifying)
+                            ReportProgress(f, status, clearPagePreview: true);
+                        else
+                            ReportProgress(f, status, latestPage);
                     },
-                    pageProgress: page =>
-                    {
-                        PagePreviewHeader = page.Header;
-                        PagePreviewLines = page.FormattedWordLines().ToList();
-                    });
+                    pageProgress: page => latestPage = page);
             });
 
             Wizard.FlashSucceeded = true;
-            StatusMessage = "Flash complete";
+            PagePreviewHeader = null;
+            PagePreviewLines = [];
+            StatusMessage = "Flashed and verified.";
             DetailMessage = "Press RESET on the calculator to restart.";
         }
         catch (Exception ex)
@@ -366,6 +374,9 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
         }
 
         if (Wizard.IsBusy || BatchPhase is BatchPhase.BackingUp or BatchPhase.Flashing)
+            return;
+
+        if (Wizard.FlashSucceeded && Wizard.Step == WizardStep.Flash)
             return;
 
         try
@@ -502,6 +513,39 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
         {
             Registry.CurrentUser.CreateSubKey(@"Software\MachII\15CEFlasher")?.DeleteValue(BatchFirmwarePathKey, false);
         }
+    }
+
+    private void ReportProgress(double fraction, string status, FlashPageWrite? page = null, bool clearPagePreview = false)
+    {
+        RunOnUi(() =>
+        {
+            Progress = fraction;
+            StatusMessage = status;
+            if (clearPagePreview)
+            {
+                PagePreviewHeader = null;
+                PagePreviewLines = [];
+            }
+            else if (page is not null)
+            {
+                PagePreviewHeader = page.Header;
+                PagePreviewLines = page.FormattedWordLines().ToList();
+            }
+
+            Notify(nameof(Progress));
+        });
+    }
+
+    private static void RunOnUi(Action action)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
+
+        dispatcher.Invoke(action);
     }
 
     private void NotifyAll()
