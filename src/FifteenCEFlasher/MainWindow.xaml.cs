@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using FifteenCEFlasherCore;
 
 namespace FifteenCEFlasher;
@@ -12,6 +14,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        SubtitleText.Text = AppVersionLabel();
         _store.PropertyChanged += (_, _) => Dispatcher.Invoke(UpdateUi);
         _store.Start();
         UpdateUi();
@@ -23,6 +26,16 @@ public partial class MainWindow : Window
         base.OnClosed(e);
     }
 
+    private static string AppVersionLabel()
+    {
+        var path = Environment.ProcessPath;
+        if (path is null)
+            return "Mach II Labs · Windows";
+
+        var info = FileVersionInfo.GetVersionInfo(path);
+        return $"Mach II Labs · Windows · {info.FileMajorPart}.{info.FileMinorPart}.{info.FileBuildPart} ({info.FilePrivatePart})";
+    }
+
     private void UpdateUi()
     {
         StatusText.Text = _store.StatusMessage;
@@ -30,7 +43,7 @@ public partial class MainWindow : Window
         ProgressBar.Value = _store.Progress;
         ProgressBar.Visibility = _store.Progress > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        MainContent.Content = _store.ShowWelcome ? BuildWelcome() : BuildActiveView();
+        MainContent.Content = _store.ShowWelcome ? BuildWelcome() : Scroll(BuildActiveView());
     }
 
     private UIElement BuildWelcome()
@@ -104,6 +117,8 @@ public partial class MainWindow : Window
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 16),
         });
+
+        panel.Children.Add(WizardDiagram("wizard-programming-mode.png"));
 
         var ports = _store.ProbeResult?.AllPorts ?? [];
         if (ports.Count > 0)
@@ -204,18 +219,59 @@ public partial class MainWindow : Window
             Margin = new Thickness(0, 0, 0, 12),
         });
 
-        panel.Children.Add(new TextBlock
+        switch (step)
         {
-            Text = StepBody(step),
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 16),
-        });
+            case WizardStep.Cable:
+                panel.Children.Add(WizardDiagram("wizard-cable.png", maxHeight: 280));
+                break;
+            case WizardStep.ProgrammingMode:
+                panel.Children.Add(WizardDiagram("wizard-programming-mode.png"));
+                break;
+            case WizardStep.Finish:
+                panel.Children.Add(WizardDiagram("wizard-finish.png"));
+                break;
+            case WizardStep.Checksum:
+                panel.Children.Add(WizardDiagram("wizard-checksum.png", maxHeight: 200));
+                break;
+        }
+
+        foreach (var line in StepBodyLines(step))
+            panel.Children.Add(BodyText(line));
+
+        if (step == WizardStep.Cable)
+            panel.Children.Add(WarningBox("Use the POGO cable only on the HP 15C Collector’s Edition. This app will not flash other calculators. Do not use the cable on an HP 15C Limited Edition, a pre-2015 12C, an HP 20b, or an HP 30b, as it could permanently damage your calculator."));
+
+        if (_store.SelectedMode == AppMode.Demo && step == WizardStep.Cable)
+            panel.Children.Add(MutedText("DEMO uses a simulated calculator. You do not need a cable. Follow the same steps so FLASH is familiar later."));
+
+        if (_store.SelectedMode == AppMode.Demo && step == WizardStep.ProgrammingMode)
+            panel.Children.Add(MutedText("DEMO connects the simulated calculator automatically. Continue when it appears below."));
+
+        if (step == WizardStep.Checksum && _store.FirmwareAssessment is not null)
+        {
+            var expected = VoyagerFirmwareChecksum.TestMenuDisplay(_store.FirmwareAssessment.Displayed);
+            var shortForm = VoyagerFirmwareChecksum.Formatted(_store.FirmwareAssessment.Displayed);
+            panel.Children.Add(BodyText($"You should see {expected}."));
+            panel.Children.Add(BodyText($"If you received the expected checksum of {shortForm}, the firmware update succeeded."));
+        }
 
         switch (step)
         {
             case WizardStep.Backup:
-                panel.Children.Add(MakeActionButton("Save backup…", _store.PickBackupDestination));
-                panel.Children.Add(MakeActionButton("Skip backup", _store.SkipBackup));
+                panel.Children.Add(MakeActionButton(
+                    "Save backup…",
+                    async () => await _store.SaveBackupAsync(),
+                    primary: !_store.Wizard.BackupResolved || _store.BackupPath is null,
+                    enabled: !_store.Wizard.IsBusy));
+                panel.Children.Add(MakeActionButton("Skip backup", _store.SkipBackup, enabled: !_store.Wizard.IsBusy));
+                if (_store.BackupPath is not null)
+                    panel.Children.Add(new TextBlock
+                    {
+                        Text = _store.BackupPath,
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 8, 0, 0),
+                        Foreground = (Brush)FindResource("MutedBrush"),
+                    });
                 if (_store.BackupAssessment is not null)
                     panel.Children.Add(new TextBlock { Text = _store.BackupAssessment.Message, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) });
                 break;
@@ -225,7 +281,19 @@ public partial class MainWindow : Window
                     panel.Children.Add(new TextBlock { Text = _store.FirmwareAssessment.Message, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) });
                 break;
             case WizardStep.Flash:
-                panel.Children.Add(MakeActionButton("Flash firmware", async () => await _store.RunFlashAsync(), primary: true, enabled: !_store.Wizard.IsBusy && _store.FirmwarePath is not null));
+                var flashLabel = _store.SelectedMode == AppMode.Demo
+                    ? "Flash simulated calculator"
+                    : "Flash calculator";
+                panel.Children.Add(MakeActionButton(
+                    flashLabel,
+                    async () =>
+                    {
+                        if (!ConfirmFlash())
+                            return;
+                        await _store.RunFlashAsync();
+                    },
+                    primary: true,
+                    enabled: !_store.Wizard.IsBusy && _store.FirmwarePath is not null));
                 if (_store.PagePreviewHeader is not null)
                 {
                     panel.Children.Add(new TextBlock { Text = _store.PagePreviewHeader, FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("InkBrush"), Margin = new Thickness(0, 12, 0, 4) });
@@ -238,9 +306,6 @@ public partial class MainWindow : Window
                     panel.Children.Add(new TextBlock { Text = "Calculator detected in programming mode.", Foreground = Brushes.DarkGreen });
                 break;
         }
-
-        if (step == WizardStep.Backup && _store.BackupPath is not null && !_store.Wizard.IsBusy)
-            panel.Children.Add(MakeActionButton("Run backup now", async () => await _store.RunBackupAsync(), primary: true));
 
         var nav = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 16, 0, 0) };
         if (_store.Wizard.CanGoBack)
@@ -255,17 +320,113 @@ public partial class MainWindow : Window
         return panel;
     }
 
-    private static string StepBody(WizardStep step) => step switch
+    private bool ConfirmFlash()
     {
-        WizardStep.Cable => "Connect the official HP programming cable to this PC.",
-        WizardStep.ProgrammingMode => "Hold ERASE on the calculator, press RESET, then release ERASE. Wait for Connected status below.",
-        WizardStep.Backup => "Save a backup of the current firmware before flashing.",
-        WizardStep.Firmware => "Choose the .bin firmware file to install (112 KB).",
-        WizardStep.Flash => "Write firmware to the calculator. Do not disconnect the cable.",
-        WizardStep.Finish => "Press RESET on the calculator to leave programming mode and restart.",
-        WizardStep.Checksum => "On the calculator: g ENTER ON, then 2 to view the firmware checksum.",
-        _ => "",
+        var demo = _store.SelectedMode == AppMode.Demo;
+        var title = demo ? "Flash the simulated calculator?" : "Flash the calculator?";
+        var message = demo
+            ? "DEMO writes only the simulated calculator on this PC. A real HP 15C is not changed.\n\nWrite starts at address 0x04000."
+            : "FLASH writes a real calculator. User memory will be wiped. The bootloader at 0x0000–0x3FFF is not overwritten.\n\nWrite starts at address 0x04000.";
+
+        return MessageBox.Show(
+            message,
+            title,
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning,
+            MessageBoxResult.Cancel) == MessageBoxResult.OK;
+    }
+
+    private static string[] StepBodyLines(WizardStep step) => step switch
+    {
+        WizardStep.Cable =>
+        [
+            "Open the calculator's battery door and insert the POGO cable. The connector is keyed; the POGO can only be inserted one way. Make sure the plug snaps securely into place.",
+            "Plug the other end of the cable (USB-A or USB-C) into this PC.",
+        ],
+        WizardStep.ProgrammingMode =>
+        [
+            "On the cable's switch box, hold ERASE, press RESET, then release ERASE. The display stays off. The calculator's ON button is ignored in this state.",
+            "Once the calculator is recognized (“Connected: ATSAM4LC2C” is shown), continue with the next step.",
+        ],
+        WizardStep.Backup =>
+        [
+            "Save a copy of the currently installed firmware in case you want to restore it later. Choosing a location reads the calculator immediately.",
+        ],
+        WizardStep.Firmware =>
+        [
+            "Choose a 114,688 (0x1C000) byte file with .bin extension. This app does not download HP firmware.",
+        ],
+        WizardStep.Flash =>
+        [
+            "Write starts at address 0x04000. The SAM-BA bootloader below that address is left intact.",
+        ],
+        WizardStep.Finish =>
+        [
+            "Press RESET on the cable switch-box, then turn the calculator ON. “Pr Error” in the display is expected. Press any key to see 0.0000.",
+        ],
+        WizardStep.Checksum =>
+        [
+            "Turn the calculator OFF (press ON). Hold g and ENTER, then press ON. Release ON, then release g and ENTER.",
+            "The display shows the test menu: “1.L 2.C 3.H”. Press 2.",
+        ],
+        _ => [],
     };
+
+    private static ScrollViewer Scroll(UIElement child) =>
+        new()
+        {
+            Content = child,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        };
+
+    private static Image WizardDiagram(string fileName, double maxHeight = 160)
+    {
+        return new Image
+        {
+            Source = new BitmapImage(new Uri($"pack://application:,,,/Assets/{fileName}")),
+            Stretch = Stretch.Uniform,
+            MaxHeight = maxHeight,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 0, 12),
+            SnapsToDevicePixels = true,
+        };
+    }
+
+    private TextBlock BodyText(string text) =>
+        new()
+        {
+            Text = text,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = (Brush)FindResource("InkBrush"),
+            Margin = new Thickness(0, 0, 0, 10),
+        };
+
+    private TextBlock MutedText(string text) =>
+        new()
+        {
+            Text = text,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = (Brush)FindResource("MutedBrush"),
+            Margin = new Thickness(0, 0, 0, 10),
+        };
+
+    private UIElement WarningBox(string text)
+    {
+        return new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(255, 173, 51)),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(10),
+            Margin = new Thickness(0, 0, 0, 16),
+            Child = new TextBlock
+            {
+                Text = text,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = Brushes.Black,
+            },
+        };
+    }
 
     private UIElement MakeFooterButtons(bool showBack, string? doneLabel, Action? onDone = null)
     {

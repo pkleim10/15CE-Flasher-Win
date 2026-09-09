@@ -189,7 +189,7 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
         }
     }
 
-    public void PickBackupDestination()
+    public async Task SaveBackupAsync()
     {
         var dialog = new SaveFileDialog
         {
@@ -201,8 +201,8 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
             return;
 
         BackupPath = dialog.FileName;
-        Wizard.BackupResolved = true;
         NotifyAll();
+        await RunBackupAsync();
     }
 
     public void SkipBackup()
