@@ -625,17 +625,10 @@ public partial class MainWindow : Window
         var btn = new Button
         {
             Content = label,
-            Padding = new Thickness(16, 8, 16, 8),
+            Style = (Style)FindResource(primary ? "PrimaryActionButtonStyle" : "ActionButtonStyle"),
             Margin = new Thickness(0, 0, 8, 8),
             HorizontalAlignment = HorizontalAlignment.Left,
-            HorizontalContentAlignment = HorizontalAlignment.Center,
             IsEnabled = enabled,
-            Background = primary ? (Brush)FindResource("AccentBrush") : Brushes.White,
-            Foreground = primary ? Brushes.White : (Brush)FindResource("InkBrush"),
-            BorderBrush = primary
-                ? (Brush)FindResource("AccentBrush")
-                : new SolidColorBrush(Color.FromRgb(229, 231, 235)),
-            BorderThickness = new Thickness(1),
         };
         btn.Click += (_, _) => onClick();
         return btn;
