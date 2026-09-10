@@ -200,24 +200,34 @@ public partial class MainWindow : Window
             var backupPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
             var skip = new RadioButton { Content = "Skip backups", IsChecked = _store.BatchBackupChoice == BatchBackupChoice.Skip, Margin = new Thickness(0, 0, 16, 0) };
             var auto = new RadioButton { Content = "Auto-save backups", IsChecked = _store.BatchBackupChoice == BatchBackupChoice.AutoSave };
-            skip.Checked += (_, _) => _store.BatchBackupChoice = BatchBackupChoice.Skip;
-            auto.Checked += (_, _) => _store.BatchBackupChoice = BatchBackupChoice.AutoSave;
+            skip.Checked += (_, _) => _store.SetBatchBackupChoice(BatchBackupChoice.Skip);
+            auto.Checked += (_, _) => _store.SetBatchBackupChoice(BatchBackupChoice.AutoSave);
             backupPanel.Children.Add(skip);
             backupPanel.Children.Add(auto);
             panel.Children.Add(backupPanel);
 
             if (_store.BatchBackupChoice == BatchBackupChoice.AutoSave)
+            {
                 panel.Children.Add(MakeActionButton("Choose backup folder…", _store.PickBatchBackupFolder));
+                if (_store.BatchBackupFolder is not null)
+                    panel.Children.Add(new TextBlock
+                    {
+                        Text = _store.BatchBackupFolder,
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 4, 0, 0),
+                        Foreground = (Brush)FindResource("MutedBrush"),
+                    });
+            }
 
             var start = MakeActionButton("Start batch", () =>
             {
-                if (!_store.CanStartBatch)
+                if (_store.BatchStartBlockedReason is { } reason)
                 {
-                    MessageBox.Show("Choose firmware first.", "BATCH", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(reason, "BATCH", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
                 _store.StartBatchRun();
-            }, primary: true);
+            }, primary: true, enabled: _store.CanStartBatch);
             start.Margin = new Thickness(0, 16, 8, 8);
             panel.Children.Add(start);
         }

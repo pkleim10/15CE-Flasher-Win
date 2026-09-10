@@ -65,8 +65,19 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
     public string? BatchSessionStamp { get; private set; }
 
     public bool IsBatchActive => !ShowWelcome && SelectedMode == AppMode.Batch;
-    public bool CanStartBatch =>
-        Wizard.FirmwareOk && (BatchBackupChoice == BatchBackupChoice.Skip || BatchBackupFolder is not null);
+    public bool CanStartBatch => BatchStartBlockedReason is null;
+
+    public string? BatchStartBlockedReason
+    {
+        get
+        {
+            if (!Wizard.FirmwareOk)
+                return "Choose firmware first.";
+            if (BatchBackupChoice == BatchBackupChoice.AutoSave && BatchBackupFolder is null)
+                return "Choose a backup folder.";
+            return null;
+        }
+    }
 
     public Flasher Flasher { get; private set; }
 
@@ -213,22 +224,33 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
         NotifyAll();
     }
 
+    public void SetBatchBackupChoice(BatchBackupChoice choice)
+    {
+        if (BatchBackupChoice == choice)
+            return;
+        BatchBackupChoice = choice;
+        Notify(nameof(BatchBackupChoice));
+        Notify(nameof(CanStartBatch));
+        Notify(nameof(BatchStartBlockedReason));
+        Notify(nameof(BatchBackupFolder));
+    }
+
     public void PickBatchBackupFolder()
     {
-        // WPF has no built-in folder picker — use OpenFileDialog hack or WinForms.
-        var dialog = new OpenFileDialog
+        var dialog = new OpenFolderDialog
         {
-            CheckFileExists = false,
-            CheckPathExists = true,
-            FileName = "Select folder",
             Title = "Choose backup folder",
+            Multiselect = false,
         };
+        if (!string.IsNullOrEmpty(BatchBackupFolder))
+            dialog.InitialDirectory = BatchBackupFolder;
         if (dialog.ShowDialog() != true)
             return;
 
-        BatchBackupFolder = Path.GetDirectoryName(dialog.FileName);
+        BatchBackupFolder = dialog.FolderName;
         Notify(nameof(BatchBackupFolder));
         Notify(nameof(CanStartBatch));
+        Notify(nameof(BatchStartBlockedReason));
     }
 
     public void BeginBatchSession()
