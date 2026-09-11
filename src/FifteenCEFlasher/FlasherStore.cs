@@ -352,6 +352,7 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
         PagePreviewHeader = null;
         PagePreviewLines = [];
         NotifyAll();
+        var flashRunSucceeded = false;
         try
         {
             FlashPageWrite? latestPage = null;
@@ -370,18 +371,23 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
                             _ => StatusMessage,
                         };
                         if (phase == FlashProgressPhase.Verifying)
-                            ReportProgress(f, status, clearPagePreview: true);
+                            ReportProgress(f, status);
                         else
                             ReportProgress(f, status, latestPage);
                     },
                     pageProgress: page => latestPage = page);
             });
 
+            flashRunSucceeded = true;
             Wizard.FlashSucceeded = true;
-            PagePreviewHeader = null;
-            PagePreviewLines = [];
+            if (latestPage is not null)
+            {
+                PagePreviewHeader = latestPage.Header;
+                PagePreviewLines = latestPage.FormattedWordLines().ToList();
+            }
             StatusMessage = "Flashed and verified.";
             DetailMessage = "Press RESET on the calculator to restart.";
+            Progress = 1;
         }
         catch (Exception ex)
         {
@@ -390,7 +396,8 @@ public sealed class FlasherStore : INotifyPropertyChanged, IDisposable
         finally
         {
             Wizard.IsBusy = false;
-            Progress = 0;
+            if (!flashRunSucceeded)
+                Progress = 0;
             NotifyAll();
         }
     }
