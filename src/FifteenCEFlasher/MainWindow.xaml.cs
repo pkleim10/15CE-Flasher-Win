@@ -80,7 +80,7 @@ public partial class MainWindow : Window
         panel.Children.Add(MakeModeButton("FLASH", "Guided 7-step wizard", AppMode.Flash));
         panel.Children.Add(MakeModeButton("BATCH", "Flash many calculators in a row", AppMode.Batch));
         panel.Children.Add(MakeModeButton("DEMO", "Try the wizard without hardware", AppMode.Demo));
-        panel.Children.Add(MakeModeButton("Connection Probe", "Test cable detection only (beta)", AppMode.Probe));
+        panel.Children.Add(MakeModeButton("Connection Probe", "Test cable detection only", AppMode.Probe));
 
         return panel;
     }
@@ -122,7 +122,7 @@ public partial class MainWindow : Window
 
         panel.Children.Add(new TextBlock
         {
-            Text = "Connection Probe (beta)",
+            Text = "Connection Probe",
             FontSize = 20,
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 0, 0, 12),
@@ -137,20 +137,16 @@ public partial class MainWindow : Window
 
         panel.Children.Add(WizardDiagram("wizard-programming-mode.png"));
 
-        var ports = _store.ProbeResult?.AllPorts ?? [];
-        if (ports.Count > 0)
+        var atmelPort = _store.ProbeResult?.Port
+            ?? (_store.ProbeResult?.AllPorts ?? []).FirstOrDefault(p => p.Kind == UsbPortKind.AtmelSamBa);
+        if (atmelPort is not null)
         {
-            panel.Children.Add(new TextBlock { Text = "COM ports:", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 4) });
-            foreach (var port in ports)
+            panel.Children.Add(new TextBlock { Text = "Atmel port:", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 4) });
+            panel.Children.Add(new TextBlock
             {
-                var label = port.Kind switch
-                {
-                    UsbPortKind.AtmelSamBa => $"{port.PortName} · Atmel SAM-BA (03EB:6124)",
-                    UsbPortKind.Ftdi => $"{port.PortName} · FTDI (0403:6015) — ignore for SAM-BA",
-                    _ => $"{port.PortName} · unknown",
-                };
-                panel.Children.Add(new TextBlock { Text = label, Foreground = (Brush)FindResource("MutedBrush"), Margin = new Thickness(0, 0, 0, 2) });
-            }
+                Text = $"{atmelPort.PortName} · Atmel SAM-BA (03EB:6124)",
+                Foreground = (Brush)FindResource("MutedBrush"),
+            });
         }
 
         panel.Children.Add(MakeFooterButtons(showBack: true, doneLabel: "Quit"));
