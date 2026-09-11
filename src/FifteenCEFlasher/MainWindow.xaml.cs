@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using FifteenCEFlasherCore;
 using SharpVectors.Converters;
 using SharpVectors.Renderers.Wpf;
@@ -11,6 +12,8 @@ namespace FifteenCEFlasher;
 
 public partial class MainWindow : Window
 {
+    private static readonly SolidColorBrush SidebarGreen = new(Color.FromRgb(51, 199, 102));
+
     private readonly FlasherStore _store = new();
 
     public MainWindow()
@@ -321,20 +324,28 @@ public partial class MainWindow : Window
 
     private UIElement BuildWizardView()
     {
-        var grid = new Grid();
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var outer = new Grid();
+        outer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        outer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        outer.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        outer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var sidebar = BuildWizardStepSidebar();
+        Grid.SetColumn(sidebar, 0);
+        Grid.SetRow(sidebar, 0);
+        Grid.SetRowSpan(sidebar, 2);
+        outer.Children.Add(sidebar);
+
+        var contentGrid = new Grid();
+        contentGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        contentGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetColumn(contentGrid, 1);
+        Grid.SetRow(contentGrid, 0);
+        Grid.SetRowSpan(contentGrid, 2);
+        outer.Children.Add(contentGrid);
 
         var panel = new StackPanel();
         var step = _store.Wizard.Step;
-
-        panel.Children.Add(new TextBlock
-        {
-            Text = $"Step {step.Number()} of {Enum.GetValues<WizardStep>().Length}: {step.Title()}",
-            FontSize = 20,
-            FontWeight = FontWeights.Bold,
-            Margin = new Thickness(0, 0, 0, 12),
-        });
 
         switch (step)
         {
@@ -440,12 +451,177 @@ public partial class MainWindow : Window
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
         };
         Grid.SetRow(scroll, 0);
-        grid.Children.Add(scroll);
+        contentGrid.Children.Add(scroll);
 
         var buttons = BuildWizardButtons(step);
         Grid.SetRow(buttons, 1);
-        grid.Children.Add(buttons);
-        return grid;
+        contentGrid.Children.Add(buttons);
+        return outer;
+    }
+
+    private UIElement BuildWizardStepSidebar()
+    {
+        var steps = Enum.GetValues<WizardStep>();
+        var panel = new StackPanel { Width = 196, Margin = new Thickness(0, 0, 20, 0) };
+
+        for (var i = 0; i < steps.Length; i++)
+        {
+            panel.Children.Add(MakeSidebarRow(steps[i]));
+            if (i < steps.Length - 1)
+                panel.Children.Add(MakeSidebarConnector(steps[i]));
+        }
+
+        return panel;
+    }
+
+    private UIElement MakeSidebarRow(WizardStep step)
+    {
+        var wizard = _store.Wizard;
+        var complete = wizard.IsComplete(step);
+        var upcoming = wizard.IsUpcoming(step);
+        var current = wizard.Step == step;
+
+        var row = new Grid { Margin = new Thickness(0, 0, 0, 0) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        row.Children.Add(MakeSidebarMarker(step, complete, current, upcoming));
+
+        var title = new TextBlock
+        {
+            Text = $"{step.Number()}. {step.Title()}",
+            FontSize = 13,
+            FontWeight = current ? FontWeights.SemiBold : FontWeights.Medium,
+            Foreground = upcoming
+                ? (Brush)FindResource("MutedBrush")
+                : (Brush)FindResource("InkBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(10, 0, 0, 0),
+        };
+        Grid.SetColumn(title, 1);
+        row.Children.Add(title);
+
+        var container = new Border
+        {
+            Padding = new Thickness(8, 7, 8, 7),
+            Child = row,
+            CornerRadius = new CornerRadius(14),
+        };
+
+        if (current)
+        {
+            container.Background = new SolidColorBrush(Color.FromArgb(26, 37, 99, 235));
+            container.BorderBrush = new SolidColorBrush(Color.FromArgb(217, 37, 99, 235));
+            container.BorderThickness = new Thickness(1.5);
+        }
+
+        return container;
+    }
+
+    private UIElement MakeSidebarMarker(WizardStep step, bool complete, bool current, bool upcoming)
+    {
+        var marker = new Grid { Width = 22, Height = 22 };
+
+        if (complete)
+        {
+            marker.Children.Add(new Ellipse
+            {
+                Fill = SidebarGreen,
+                Width = 22,
+                Height = 22,
+            });
+            marker.Children.Add(new TextBlock
+            {
+                Text = "✓",
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+        }
+        else if (current)
+        {
+            marker.Children.Add(new Ellipse
+            {
+                Fill = (Brush)FindResource("AccentBrush"),
+                Width = 22,
+                Height = 22,
+            });
+            marker.Children.Add(new TextBlock
+            {
+                Text = step.Number().ToString(),
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+        }
+        else
+        {
+            marker.Children.Add(new Ellipse
+            {
+                Fill = new SolidColorBrush(Color.FromArgb(46, 107, 114, 128)),
+                Width = 22,
+                Height = 22,
+            });
+            marker.Children.Add(new TextBlock
+            {
+                Text = step.Number().ToString(),
+                FontSize = 11,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = (Brush)FindResource("MutedBrush"),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = upcoming ? 0.85 : 1,
+            });
+        }
+
+        return marker;
+    }
+
+    private UIElement MakeSidebarConnector(WizardStep step)
+    {
+        var next = (WizardStep)((int)step + 1);
+        var wizard = _store.Wizard;
+        var toCurrent = wizard.Step == next;
+        var toComplete = wizard.IsComplete(next);
+
+        var accent = (Brush)FindResource("AccentBrush");
+        var muted = new SolidColorBrush(Color.FromArgb(89, 107, 114, 128));
+
+        if (toComplete || toCurrent)
+        {
+            return new Border
+            {
+                Width = 2,
+                Height = 16,
+                Background = toComplete ? SidebarGreen : accent,
+                Margin = new Thickness(18, 0, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+        }
+
+        var connector = new Grid
+        {
+            Height = 16,
+            Width = 2,
+            Margin = new Thickness(18, 0, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        connector.Children.Add(new Line
+        {
+            X1 = 1,
+            Y1 = 0,
+            X2 = 1,
+            Y2 = 16,
+            Stroke = muted,
+            StrokeThickness = 1.5,
+            StrokeDashArray = new DoubleCollection { 3, 3 },
+        });
+        return connector;
     }
 
     private UIElement BuildWizardButtons(WizardStep step)
