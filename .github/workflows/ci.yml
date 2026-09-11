@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
 
 env:
-  APP_VERSION: "1.0.0"
-  APP_BUILD: "108"
-  CDN_FILENAME: "15CEFlasher-Win-1.0.0-108.exe"
+  APP_VERSION: "1.0.1"
+  APP_BUILD: "109"
+  CDN_FILENAME: "15CEFlasher-Win-1.0.1-109.exe"
 
 jobs:
   build:
